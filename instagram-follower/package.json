@@ -1,0 +1,19 @@
+{
+  "name": "instagram-follower",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Patchright-driven Instagram commenter follower with anti-block safety governors.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall-chrome": "patchright install chrome",
+    "login": "node scripts/run.js --login",
+    "status": "node scripts/run.js --status",
+    "test": "node scripts/test.js"
+  },
+  "dependencies": {
+    "patchright": "^1.52.0"
+  }
+}

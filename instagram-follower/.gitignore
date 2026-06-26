@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Runtime data — NEVER commit. Contains the logged-in Chrome session (cookies!),
+# the per-account state ledger, and block screenshots.
+.data/
+*.local
+
+# Patchright / Playwright browser downloads (if installed locally)
+.cache/
+ms-playwright/
+
+# OS noise
+.DS_Store
+
+# Logs
+*.log

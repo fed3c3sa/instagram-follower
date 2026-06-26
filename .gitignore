@@ -1,0 +1,15 @@
+# Dependencies
+**/node_modules/
+
+# Runtime data — NEVER commit. Holds the logged-in Chrome session (cookies!),
+# the per-account state ledger, and block screenshots.
+**/.data/
+*.local
+
+# Browser downloads
+**/.cache/
+**/ms-playwright/
+
+# OS / logs
+.DS_Store
+*.log

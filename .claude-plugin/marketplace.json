@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "secondbrain-tools",
+  "owner": {
+    "name": "Federico Cesarini",
+    "email": "mail.fede.cesarini@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "instagram-follower",
+      "source": "./instagram-follower",
+      "description": "Open a real browser and slowly follow everyone who commented on given Instagram posts/reels, with hard-coded anti-block safety governors. Marketing-growth tool.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Federico Cesarini"
+      },
+      "keywords": ["instagram", "marketing", "growth", "automation", "browser"]
+    }
+  ]
+}

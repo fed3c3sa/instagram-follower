@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "instagram-follower",
+  "displayName": "Instagram Commenter Follower",
+  "version": "0.1.0",
+  "description": "Open a real browser (Patchright + Chrome) and SLOWLY follow everyone who commented on given Instagram posts/reels, with hard-coded rate governors and an instant action-block tripwire so a precious marketing account does not get blocked.",
+  "author": {
+    "name": "Federico Cesarini",
+    "email": "mail.fede.cesarini@gmail.com"
+  },
+  "keywords": ["instagram", "marketing", "growth", "follow", "automation", "browser", "patchright"],
+  "license": "MIT",
+  "defaultEnabled": false,
+  "userConfig": {
+    "account_age": {
+      "type": "string",
+      "title": "Account age / standing",
+      "description": "One of: aged (6+ months, clean) | under_6_months | new. Controls the safety limits. Lower = slower & safer.",
+      "default": "under_6_months"
+    },
+    "working_hours_start": {
+      "type": "string",
+      "title": "Activity start (local HH:MM)",
+      "description": "The tool only acts after this local time (looks human). Default 09:00.",
+      "default": "09:00"
+    },
+    "working_hours_end": {
+      "type": "string",
+      "title": "Activity end (local HH:MM)",
+      "description": "The tool stops acting after this local time. Default 22:30.",
+      "default": "22:30"
+    },
+    "max_per_run": {
+      "type": "number",
+      "title": "Max follows per single run",
+      "description": "Caps how many follows one invocation performs (never spend the whole day's budget at once). Default 10.",
+      "default": 10,
+      "min": 1,
+      "max": 12
+    },
+    "follow_style": {
+      "type": "string",
+      "title": "Follow style",
+      "description": "engage_then_follow (open profile, dwell, then Follow — recommended) | follow_only.",
+      "default": "engage_then_follow"
+    },
+    "targets": {
+      "type": "string",
+      "title": "Whom to follow",
+      "description": "commenters_and_replies (top-level commenters + threaded repliers — recommended) | commenters_only.",
+      "default": "commenters_and_replies"
+    }
+  }
+}
