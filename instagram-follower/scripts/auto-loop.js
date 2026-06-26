@@ -54,7 +54,9 @@ function msUntilNextResume() {
 /** Run one governed batch; resolve with the parsed result JSON (from stdout). */
 function runOnce() {
   return new Promise((resolve) => {
-    const child = spawn('node', [RUN, '--follow-pending'], {
+    // 00:00–00:00 = a 24h window (governor treats equal start/end as always-on), so
+    // the uncapped run is never paused by the working-hours gate.
+    const child = spawn('node', [RUN, '--follow-pending', '--hours-start', '00:00', '--hours-end', '00:00'], {
       cwd: path.resolve(__dirname, '..'),
       env: process.env,
     });
@@ -135,10 +137,14 @@ async function main() {
       } else if (code === 'WORKING_HOURS') {
         waitMs = msUntilNextResume();
         log(`outside activity window → sleeping ${Math.round(waitMs / 60000)} min until it opens.`);
-      } else {
-        // ok (did a batch) or HOURLY_CAP → wait for the rolling hour to clear.
+      } else if (code === 'HOURLY_CAP') {
         waitMs = jitter(minutes(62));
-        log(`hourly budget spent → sleeping ${Math.round(waitMs / 60000)} min for the hour to clear.`);
+        log(`hourly cap → sleeping ${Math.round(waitMs / 60000)} min for the hour to clear.`);
+      } else {
+        // Caps are removed: a plain 'ok' that still leaves pending means the run ended
+        // early (not a cap). Resume promptly rather than idling an hour.
+        waitMs = jitter(minutes(1.5));
+        log(`run ended with ${res.pendingRemaining} pending and no cap hit → resuming in ${Math.round(waitMs / 1000)}s.`);
       }
       await sleep(waitMs);
       continue;

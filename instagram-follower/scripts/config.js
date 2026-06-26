@@ -15,22 +15,26 @@ const path = require('path');
 const { parseHHMM, clamp } = require('./util');
 
 // Per-tier shipped defaults (extra-safe profile).
-// NOTE: under_6_months was raised from the shipped extra-safe values (4/h, 25/day)
-// to 20/h, 100/day at the account owner's explicit request. This DELIBERATELY trades
-// away most of the anti-block safety margin and carries real action-block / ban risk
-// on a young account. Revert to 4 / 25 / 40 / 10 to restore the safe profile.
+// ⚠️ NOTE: under_6_months has had ALL rate caps REMOVED at the account owner's
+// explicit, repeated request ("remove caps, proceed until I tell you"). The values
+// below are effectively unlimited — there is no hourly/daily/per-run ceiling, so the
+// only pacing left is the 10–40s delay between follows. This abandons the anti-block
+// design entirely and carries near-certain action-block / permanent-ban risk on a
+// young account. The block tripwire (safety.js) is intentionally still active.
+// Restore safety with 4 / 25 / 40 / 10 (defaults) and 5 / 30 / 40 / 12 (hard caps).
+const UNCAPPED = { followsPerHour: 1000000, followsPerDay: 1000000, combinedPerDay: 1000000, perRun: 1000000 };
 const TIER_DEFAULTS = {
   aged: { followsPerHour: 6, followsPerDay: 40, combinedPerDay: 60, perRun: 15 },
-  under_6_months: { followsPerHour: 20, followsPerDay: 100, combinedPerDay: 120, perRun: 20 },
+  under_6_months: { ...UNCAPPED },
   new: { followsPerHour: 2, followsPerDay: 12, combinedPerDay: 20, perRun: 6 },
 };
 
 // Absolute ceilings per tier. The governor never exceeds these no matter what an
 // override asks for. (7,500 = Meta-official STANDING follow cap, enforced separately.)
-// under_6_months ceilings raised to match the owner-requested push profile above.
+// under_6_months ceilings removed to match the owner-requested uncapped profile above.
 const TIER_HARD_CAPS = {
   aged: { followsPerHour: 8, followsPerDay: 60, combinedPerDay: 80, perRun: 20 },
-  under_6_months: { followsPerHour: 20, followsPerDay: 100, combinedPerDay: 120, perRun: 25 },
+  under_6_months: { ...UNCAPPED },
   new: { followsPerHour: 3, followsPerDay: 15, combinedPerDay: 25, perRun: 8 },
 };
 

@@ -173,7 +173,7 @@ async function modeRun(config, st, cli, log) {
     // whole run on skips and follow nobody. A separate, generous skip ceiling stops a
     // runaway scan.
     const attemptCap = Math.max(config.limits.perRun * 2, 15);
-    const skipCap = 600;
+    const skipCap = Math.max(config.limits.perRun * 2, 600);
     log.info(`Follow budget this run: ${budget} (attempt cap ${attemptCap}, skip ceiling ${skipCap}). Tier ${config.tier}${gate.limits.rampActive ? ' [post-cooldown half-ramp ACTIVE]' : ''}.`);
 
     // Shuffle the pending list (Fisher–Yates). Targets are stored in extraction order,
