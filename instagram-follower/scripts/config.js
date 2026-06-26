@@ -15,17 +15,22 @@ const path = require('path');
 const { parseHHMM, clamp } = require('./util');
 
 // Per-tier shipped defaults (extra-safe profile).
+// NOTE: under_6_months was raised from the shipped extra-safe values (4/h, 25/day)
+// to 20/h, 100/day at the account owner's explicit request. This DELIBERATELY trades
+// away most of the anti-block safety margin and carries real action-block / ban risk
+// on a young account. Revert to 4 / 25 / 40 / 10 to restore the safe profile.
 const TIER_DEFAULTS = {
   aged: { followsPerHour: 6, followsPerDay: 40, combinedPerDay: 60, perRun: 15 },
-  under_6_months: { followsPerHour: 4, followsPerDay: 25, combinedPerDay: 40, perRun: 10 },
+  under_6_months: { followsPerHour: 20, followsPerDay: 100, combinedPerDay: 120, perRun: 20 },
   new: { followsPerHour: 2, followsPerDay: 12, combinedPerDay: 20, perRun: 6 },
 };
 
 // Absolute ceilings per tier. The governor never exceeds these no matter what an
 // override asks for. (7,500 = Meta-official STANDING follow cap, enforced separately.)
+// under_6_months ceilings raised to match the owner-requested push profile above.
 const TIER_HARD_CAPS = {
   aged: { followsPerHour: 8, followsPerDay: 60, combinedPerDay: 80, perRun: 20 },
-  under_6_months: { followsPerHour: 5, followsPerDay: 30, combinedPerDay: 40, perRun: 12 },
+  under_6_months: { followsPerHour: 20, followsPerDay: 100, combinedPerDay: 120, perRun: 25 },
   new: { followsPerHour: 3, followsPerDay: 15, combinedPerDay: 25, perRun: 8 },
 };
 
@@ -33,8 +38,8 @@ const STANDING_FOLLOW_CAP = 7500; // Meta-official concurrent (not lifetime) cap
 
 // Pacing (ms). Long, randomized — velocity matters more than daily totals.
 const PACING = {
-  followDelayMin: 40_000,
-  followDelayMax: 120_000,
+  followDelayMin: 10_000,
+  followDelayMax: 40_000,
   uiDelayMin: 3_000,
   uiDelayMax: 8_000,
   longPauseMin: 120_000,
@@ -43,8 +48,8 @@ const PACING = {
   longPauseEveryMax: 7,
   dwellMin: 3_000, // engage-then-follow: dwell on the profile before clicking
   dwellMax: 9_000,
-  scrollWaitMin: 1_000, // between comment-dialog scroll passes
-  scrollWaitMax: 2_200,
+  scrollWaitMin: 1_400, // between comment-dialog scroll passes (give lazy-load time)
+  scrollWaitMax: 2_600,
 };
 
 const SCROLL_MAX_ITERATIONS = 40;

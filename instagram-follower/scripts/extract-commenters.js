@@ -56,7 +56,7 @@ async function extractCommenters(page, postUrl, ctx) {
 
     if (!grew && clicked === 0) {
       stable += 1;
-      if (stable >= 2) break; // two quiet passes = end of list
+      if (stable >= 4) break; // four quiet passes = genuinely the end of the list
     } else {
       stable = 0;
     }

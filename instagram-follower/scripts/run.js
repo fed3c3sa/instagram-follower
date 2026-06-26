@@ -19,7 +19,7 @@
  *   3 login required | 10 BLOCK detected | 1 unexpected error
  */
 
-const { parseArgs, makeLogger, normalizePostUrl, humanDuration, sleep } = require('./util');
+const { parseArgs, makeLogger, normalizePostUrl, humanDuration, sleep, sleepRange } = require('./util');
 const { loadConfig } = require('./config');
 const state = require('./state');
 const governor = require('./governor');
@@ -95,8 +95,11 @@ async function modeRun(config, st, cli, log) {
 
   const { urls, rejected } = collectUrls(cli);
   if (rejected.length) log.warn(`Ignored ${rejected.length} non-post argument(s): ${rejected.join(', ')}`);
-  if (!urls.length) {
-    log.error('No valid Instagram post/reel URLs provided. Use --urls "<url1>,<url2>".');
+  // --follow-pending resumes from the existing ledger without re-scraping any post
+  // (extraction is the slow part). Requires that some targets are already pending.
+  const followPending = cli['follow-pending'] === true || cli['skip-extract'] === true;
+  if (!urls.length && !followPending) {
+    log.error('No valid Instagram post/reel URLs provided. Use --urls "<url1>,<url2>" (or --follow-pending to resume).');
     printSummary({ status: 'stopped', code: 'NO_URLS', reason: 'No valid post/reel URLs.' });
     return EXIT.STOP;
   }
@@ -126,6 +129,9 @@ async function modeRun(config, st, cli, log) {
     await ensureLoggedIn(br.context, br.page, config, log);
 
     // ---- Extraction phase (all URLs) ----
+    if (followPending && !urls.length) {
+      log.info(`Resume mode: skipping extraction, following ${state.pendingTargets(st).length} pending targets.`);
+    }
     for (const url of urls) {
       const { author, usernames } = await extractCommenters(br.page, url, { config, state: st, log });
       result.extracted[url] = { author, count: usernames.length };
@@ -161,20 +167,39 @@ async function modeRun(config, st, cli, log) {
     }
 
     const budget = gate.followBudget;
-    const visitCap = Math.max(config.limits.perRun * 2, 15);
-    log.info(`Follow budget this run: ${budget} (visit cap ${visitCap}). Tier ${config.tier}${gate.limits.rampActive ? ' [post-cooldown half-ramp ACTIVE]' : ''}.`);
+    // Bound on real follow ATTEMPTS (follow/request/fail). Already-following skips are
+    // read-only profile views (near-zero block risk), so they do NOT count here —
+    // otherwise a list whose front is full of people you already follow would burn the
+    // whole run on skips and follow nobody. A separate, generous skip ceiling stops a
+    // runaway scan.
+    const attemptCap = Math.max(config.limits.perRun * 2, 15);
+    const skipCap = 600;
+    log.info(`Follow budget this run: ${budget} (attempt cap ${attemptCap}, skip ceiling ${skipCap}). Tier ${config.tier}${gate.limits.rampActive ? ' [post-cooldown half-ramp ACTIVE]' : ''}.`);
 
+    // Shuffle the pending list (Fisher–Yates). Targets are stored in extraction order,
+    // which front-loads the top commenters — often already followed. Random sampling
+    // reaches not-yet-followed people quickly instead of grinding the followed cluster,
+    // and looks more organic than marching down a list.
     const worklist = state.pendingTargets(st);
+    for (let i = worklist.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [worklist[i], worklist[j]] = [worklist[j], worklist[i]];
+    }
     let burst = 0;
     let burstTarget = governor.pickBurstLength(config);
+    const attempts = () => result.followed + result.requested + result.failed;
 
     for (const target of worklist) {
       if (result.followed >= budget) {
         log.info('Reached follow budget for this run.');
         break;
       }
-      if (result.visited >= visitCap) {
-        log.info('Reached profile-visit cap for this run; leaving the rest pending.');
+      if (attempts() >= attemptCap) {
+        log.info('Reached follow-attempt cap for this run; leaving the rest pending.');
+        break;
+      }
+      if (result.skipped >= skipCap) {
+        log.info(`Skipped ${result.skipped} already-following profiles (skip ceiling); leaving the rest pending.`);
         break;
       }
       const can = governor.canFollowNow(config, st, new Date());
@@ -228,7 +253,7 @@ async function modeRun(config, st, cli, log) {
       state.saveState(config.dataDir, config.account, st);
 
       const consumedBudget = res.status === 'followed' || res.status === 'requested';
-      const moreToDo = result.followed < budget && result.visited < visitCap;
+      const moreToDo = result.followed < budget && attempts() < attemptCap && result.skipped < skipCap;
       if (!moreToDo) break;
 
       if (consumedBudget) {
@@ -241,8 +266,10 @@ async function modeRun(config, st, cli, log) {
         } else {
           await sleep(governor.normalDelayMs(config));
         }
+      } else if (res.status === 'skipped') {
+        await sleepRange(1200, 3000); // already-following: quick read-only hop to the next
       } else {
-        await sleep(governor.uiDelayMs(config)); // skipped/failed: brief pause
+        await sleep(governor.uiDelayMs(config)); // failed: brief pause
       }
     }
 

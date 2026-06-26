@@ -70,8 +70,8 @@ test('parseHHMM', () => {
 // ---- config --------------------------------------------------------------
 test('loadConfig clamps overrides to tier hard caps', () => {
   const c = loadConfig({ 'account-age': 'under_6_months', 'max-per-run': '999', 'max-per-day': '999', 'data-dir': os.tmpdir() });
-  assert.strictEqual(c.limits.perRun, 12, 'perRun clamped to 12');
-  assert.strictEqual(c.limits.followsPerDay, 30, 'followsPerDay clamped to 30');
+  assert.strictEqual(c.limits.perRun, 25, 'perRun clamped to tier hard cap');
+  assert.strictEqual(c.limits.followsPerDay, 100, 'followsPerDay clamped to tier hard cap');
   assert.strictEqual(c.tier, 'under_6_months');
 });
 

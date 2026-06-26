@@ -71,13 +71,16 @@ async function followOne(page, username, ctx) {
     await humanDwell(page, config);
   }
 
-  const btn = selectors.followButton(page).first();
+  let clicked;
   try {
-    await btn.scrollIntoViewIfNeeded({ timeout: 5000 });
-    await btn.click({ timeout: 8000 });
+    clicked = await selectors.clickFollowButton(page);
   } catch (err) {
     await safety.assertNotBlocked(config, state, page, log, `click follow ${username}`);
     return { status: 'failed', reason: 'click_failed' };
+  }
+  if (!clicked) {
+    await safety.assertNotBlocked(config, state, page, log, `find follow ${username}`);
+    return { status: 'failed', reason: 'no_follow_button' };
   }
 
   const flipped = await verifyFollowed(page);
