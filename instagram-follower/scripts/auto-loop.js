@@ -26,6 +26,29 @@ const LOG = path.join(DATA_DIR, 'auto-loop.log');
 const RESUME_HOUR = 9; // local hour to resume after a daily-cap / night pause (inside 09:00–22:30)
 const RESUME_MIN = 15;
 
+// The source posts/reels to re-scrape when the pending queue drains (dry-run =
+// extract only, no follows) so the loop keeps harvesting new commenters. These are
+// the operator's own campaign links and are NEVER committed: they live in a
+// gitignored local file (one URL per line, '#' comments allowed). Path can be
+// overridden with IG_SOURCE_URLS_FILE. If the file is missing/empty, re-scrape is
+// skipped and the loop simply stops when the queue is empty.
+// upsertTarget never downgrades a terminal status, so already followed/requested/
+// failed users are NOT re-queued — only genuinely new commenters.
+const SOURCE_URLS_FILE = process.env.IG_SOURCE_URLS_FILE || path.join(DATA_DIR, 'source-urls.txt');
+
+function loadSourceUrls() {
+  try {
+    return fs
+      .readFileSync(SOURCE_URLS_FILE, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .join(',');
+  } catch (_) {
+    return '';
+  }
+}
+
 function log(msg) {
   const line = `${new Date().toISOString()}  ${msg}\n`;
   try {
@@ -51,12 +74,14 @@ function msUntilNextResume() {
   return Math.max(minutes(5), t.getTime() - now.getTime());
 }
 
-/** Run one governed batch; resolve with the parsed result JSON (from stdout). */
-function runOnce() {
+// 00:00–00:00 = a 24h window (governor treats equal start/end as always-on), so the
+// uncapped run is never paused by the working-hours gate.
+const WINDOW_ARGS = ['--hours-start', '00:00', '--hours-end', '00:00'];
+
+/** Spawn run.js with the given args; resolve with the parsed result JSON (from stdout). */
+function runRun(args) {
   return new Promise((resolve) => {
-    // 00:00–00:00 = a 24h window (governor treats equal start/end as always-on), so
-    // the uncapped run is never paused by the working-hours gate.
-    const child = spawn('node', [RUN, '--follow-pending', '--hours-start', '00:00', '--hours-end', '00:00'], {
+    const child = spawn('node', [RUN, ...args], {
       cwd: path.resolve(__dirname, '..'),
       env: process.env,
     });
@@ -88,8 +113,20 @@ function runOnce() {
   });
 }
 
+/** One governed follow batch over the existing pending queue. */
+const runOnce = () => runRun(['--follow-pending', ...WINDOW_ARGS]);
+
+/** Re-scrape the source posts (extract only, no follows) to add new commenters.
+ *  Returns {status:'no_sources'} if no source-urls file is configured. */
+const runRescrape = () => {
+  const urls = loadSourceUrls();
+  if (!urls) return Promise.resolve({ status: 'no_sources' });
+  return runRun(['--urls', urls, '--dry-run', ...WINDOW_ARGS]);
+};
+
 let totalFollowed = 0;
 let totalRequested = 0;
+let emptyRescrapes = 0; // consecutive re-scrapes that found nothing new
 
 async function main() {
   log('=== auto-loop started — will run --follow-pending continuously, stopping only on block/cooldown/login/empty-queue ===');
@@ -117,8 +154,44 @@ async function main() {
       process.exit(3);
     }
     if (status === 'ok' && res.pendingRemaining === 0) {
-      log(`✅ DONE — pending queue empty. Cumulative this loop: ${totalFollowed} followed, ${totalRequested} requested.`);
-      process.exit(0);
+      // Queue drained → re-scrape the source posts to harvest any commenters that
+      // arrived since (and any the earlier scroll missed), then keep going. Only stop
+      // once two consecutive re-scrapes add nothing new.
+      const re = await runRescrape();
+      if (re.status === 'no_sources') {
+        log(`✅ DONE — pending queue empty and no source-urls file (${SOURCE_URLS_FILE}) to re-scrape. Cumulative this loop: ${totalFollowed} followed, ${totalRequested} requested.`);
+        process.exit(0);
+      }
+      log('queue empty → re-scraping the configured source posts for new commenters…');
+      if (re.status === 'blocked' || re.code === 'BLOCK_DETECTED') {
+        log(`!! BLOCK/CHALLENGE during re-scrape (${re.reason || ''}). STOPPING — do NOT restart; let it rest.`);
+        process.exit(10);
+      }
+      if (re.code === 'COOLDOWN') {
+        log('!! In cooldown during re-scrape. STOPPING — let it rest.');
+        process.exit(10);
+      }
+      if (re.status === 'login_required') {
+        log('!! Login required during re-scrape. STOPPING — re-login by hand, then restart the loop.');
+        process.exit(3);
+      }
+      const added = typeof re.newTargets === 'number' ? re.newTargets : 0;
+      if (added > 0) {
+        emptyRescrapes = 0;
+        log(`re-scrape added ${added} NEW targets (total pending ${re.pendingTotal}) → continuing follows.`);
+        await sleep(jitter(minutes(1)));
+        continue;
+      }
+      emptyRescrapes++;
+      log(`re-scrape found no new commenters (empty #${emptyRescrapes}/2).`);
+      if (emptyRescrapes >= 2) {
+        log(`✅ DONE — queue empty and re-scrape yields nothing new. Cumulative this loop: ${totalFollowed} followed, ${totalRequested} requested.`);
+        process.exit(0);
+      }
+      // Give fresh comments time to appear before trying again.
+      log('sleeping 20 min before the next re-scrape attempt.');
+      await sleep(jitter(minutes(20)));
+      continue;
     }
 
     // ---- Normal pauses (decide how long, then keep going) ----

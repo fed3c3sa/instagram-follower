@@ -13,3 +13,6 @@
 # OS / logs
 .DS_Store
 *.log
+
+# Local Claude Code session state
+.claude/
